@@ -3,6 +3,7 @@ import os
 import sys
 import time
 import threading
+from playwright._impl._api_types import TimeoutError
 from playwright.sync_api import Playwright, sync_playwright, expect
 
 URL = 'https://a.aliexpress.com/_mMCaCy4'
@@ -29,8 +30,11 @@ class Worker:
         browser = self.tls.playwright.webkit.launch(headless=False)
         context = browser.new_context(
             user_agent='Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1',
-            viewport={'width': 480, 'height': 720}
+            viewport={'width': 480, 'height': 720},
+            locale='en_US',
+            timezone_id='America/New_York'
         )
+
         page = context.new_page()
         page.goto(URL)
 
@@ -55,57 +59,68 @@ class Worker:
         page.locator('#fm-login-id').fill(username)
         page.wait_for_selector('#fm-login-password')
         page.locator('#fm-login-password').fill(password)
-        time.sleep(2)
+        time.sleep(1)
 
-        page.wait_for_selector('//*[@id="batman-dialog-wrap"]/div/div[2]/div/div[2]/div[2]/div/button[2]')
-        signin = page.locator('//*[@id="batman-dialog-wrap"]/div/div[2]/div/div[2]/div[2]/div/button[2]')
+        signin_selector = '//*[@id="batman-dialog-wrap"]/div/div[2]/div/div[2]/div[2]/div/button[2]'
+        page.wait_for_selector(signin_selector)
+        signin = page.locator(signin_selector)
+
         signin.click()
-
+        time.sleep(5)
         try:
-            print('cheking if success')
-            time.sleep(2)
-            # Go help button
-            go_help = '//html/body/div[4]/div/div/div[2]/div[2]/div/div'
-            page.wait_for_selector(go_help, timeout=10000)
-            page.locator(go_help).click()
-            time.sleep(2)
-            try:
-                confirmBtn = '//html/body/div[4]/div/div/div[2]/div[2]/div/div[1]'
-                print("checking confirm")
-                page.wait_for_selector(confirmBtn)
-                page.locator(confirmBtn).click()
-            except Exception as e:
-                print("Confirm button")
-                page.close()
-                context.close()
-                return
-        except:
+            page.wait_for_selector(signin_selector, timeout=3000)
             print('Not a success. Figuring out')
             try:
-                page.wait_for_selector('//*[@id="batman-dialog-wrap"]/div/div[2]/div/div[2]/div[2]/div/div[4]/div[2]', timeout=10000)
-                print(' Wrong Credentials')
+                page.wait_for_selector('//*[@id="batman-dialog-wrap"]/div/div[2]/div/div[2]/div[2]/div/div[4]/div[2]', timeout=2000)
+                print('Wrong Credentials')
                 return
             except Exception as e:
                 try:
-                    page.wait_for_selector('//*[@id="batman-dialog-wrap"]/div/div[2]/div/div[2]/div[2]/div/div[4]/div[1]', timeout=10000)
+                    page.wait_for_selector(
+                        '//*[@id="batman-dialog-wrap"]/div/div[2]/div/div[2]/div[2]/div/div[4]/div[1]', timeout=3000)
                 except Exception as e:
                     try:
-                        page.wait_for_selector('//*[@id="batman-dialog-wrap"]/div/div[2]/div/div[2]/div[2]/div/div[3]/span', timeout=10000)
+                        slideToVerifyText_selector = '//*[@id="batman-dialog-wrap"]/div/div[2]/div/div[2]/div[2]/div/div[3]/span'
+                        page.wait_for_selector(slideToVerifyText_selector, timeout=5000)
                         print('Cpatcha')
                         try:
                             print('Trying to solve..')
                             page.frame_locator('//*[@id="baxia-dialog-content"]')
                             frame_ = page.main_frame.child_frames[1]
                             frame_.wait_for_selector('//*[@id="nc_1_n1z"]')
-                            box = frame_.locator('//*[@id="nc_1__scale_text"]/span')
+                            # box = frame_.locator('//*[@id="nc_1__scale_text"]/span')
                             # print(box.bounding_box())
-                            slider = frame_.locator('//*[@id="nc_1_n1z"]')
+                            # slider = frame_.locator('//*[@id="nc_1_n1z"]')
+                            slider = '//*[@id="nc_1_n1z"]'
                             # print(slider.bounding_box())
                             # slider.drag_to(target=box, target_position={'x': 500, 'y': box.bounding_box().get('y')})
-                            frame_.drag_and_drop('//*[@id="nc_1_n1z"]', '//*[@id="nc_1_n1z"]', target_position={'x': 500, 'y': 66}, force=True)
-                            time.sleep(3)
-                            page.wait_for_selector('//*[@id="batman-dialog-wrap"]/div/div[2]/div/div[2]/div[2]/div/button[2]')
-                            signin.click()
+                            frame_.drag_and_drop(slider, slider, target_position={'x': 500, 'y': 66}, force=True)
+
+                            try:
+                                print('waiting second captcha')
+                                time.sleep(3)
+                                warningText = '//*[@id="batman-dialog-wrap"]/div/div[2]/div/div[2]/div[2]/div/div[3]/span'
+                                page.wait_for_selector(warningText, timeout=3000)
+                                print("CAptch reappeared")
+                                # print(page.main_frame.child_frames)
+                                page.wait_for_selector('//*[@id="baxia-dialog-content"]')
+                                frame_ = page.main_frame.child_frames[1]
+                                frame_.wait_for_selector('//*[@id="nc_1__scale_text"]/span')
+                                frame_.locator('//*[@id="nc_1__scale_text"]/span').click()
+                                frame_.wait_for_selector('//*[@id="nc_1_n1z"]')
+                                slider = '//*[@id="nc_1_n1z"]'
+                                print("Sldier: ", slider)
+                                frame_.drag_and_drop(slider, slider, target_position={'x': 500, 'y': 66}, force=True)
+                            except TimeoutError as e:
+                                print('Hurrah! No more captch!')
+                            except Exception as e:
+                                raiseException(e)
+                                input("Waiting")
+
+                            # time.sleep(3)
+
+                            # page.wait_for_selector(signin_selector)
+                            # signin.click()
                             try:
                                 go_help = '//html/body/div[4]/div/div/div[2]/div[2]/div/div'
                                 page.wait_for_selector(go_help)
@@ -138,6 +153,23 @@ class Worker:
                         except Exception as e:
                             page.close()
                             context.close()
+        except:
+            print('cheking if success')
+            # Go help button
+            go_help = '//html/body/div[4]/div/div/div[2]/div[2]/div/div'
+            page.wait_for_selector(go_help, timeout=10000)
+            page.locator(go_help).click()
+            time.sleep(1)
+            try:
+                confirmBtn = '//html/body/div[4]/div/div/div[2]/div[2]/div/div[1]'
+                print("checking confirm")
+                page.wait_for_selector(confirmBtn)
+                page.locator(confirmBtn).click()
+            except Exception as e:
+                print("Confirm button")
+                page.close()
+                context.close()
+                return
 
         time.sleep(5)
         page.close()
@@ -162,15 +194,15 @@ if __name__ == '__main__':
         accountsToFetch = accounts[0:threadCount]
 
         accounts = accounts[threadCount:]
-        with open('aliAccount.txt', 'w', encoding='utf-8') as aliAccount:
-            for account in accounts:
-                aliAccount.write(account + '\n')
-            aliAccount.close()
-
-        with open('done.txt', 'a', encoding='utf-8') as doneText:
-            for account in accountsToFetch:
-                doneText.write(account + '\n')
-            doneText.close()
+        # with open('aliAccount.txt', 'w', encoding='utf-8') as aliAccount:
+        #     for account in accounts:
+        #         aliAccount.write(account + '\n')
+        #     aliAccount.close()
+        #
+        # with open('done.txt', 'a', encoding='utf-8') as doneText:
+        #     for account in accountsToFetch:
+        #         doneText.write(account + '\n')
+        #     doneText.close()
         print(len(accountsToFetch))
         threads = []
         for account in accountsToFetch:
